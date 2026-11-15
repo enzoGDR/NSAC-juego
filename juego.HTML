@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ORBITAL CLEAN-UP PRO | NASA Space Apps Challenge</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            margin: 0;
+            background: #030712;
+            color: #f8fafc;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            width: 850px;
+            height: 550px;
+            border: 2px solid #0ea5e9;
+            border-radius: 10px;
+            box-shadow: 0 0 35px rgba(14, 165, 233, 0.35);
+            overflow: hidden;
+            background: #020617;
+        }
+        canvas { display: block; }
+        
+        #hud {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: linear-gradient(180deg, rgba(2,6,23,0.95) 0%, rgba(2,6,23,0) 100%);
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+        .hud-group { display: flex; gap: 18px; align-items: center; }
+        .bar-container {
+            width: 110px; height: 12px;
+            background: #1e293b;
+            border: 1px solid #475569;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bar-fill { height: 100%; transition: width 0.1s; }
+        #shield-bar { background: #22c55e; width: 100%; }
+        #fuel-bar { background: #38bdf8; width: 100%; }
+        #tractor-bar { background: #a855f7; width: 100%; }
+
+        #alert-banner {
+            position: absolute;
+            top: 50px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 38, 38, 0.85);
+            color: #fff;
+            padding: 6px 18px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            display: none;
+            animation: blink 0.8s infinite;
+            border: 1px solid #fca5a5;
+        }
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        #telemetry {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(15, 23, 42, 0.85);
+            border-top: 1px solid #1e293b;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 6, 23, 0.88);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 30px;
+            z-index: 10;
+        }
+        h1 { color: #38bdf8; font-size: 2.3rem; margin-bottom: 5px; letter-spacing: 2px; }
+        .subtitle { color: #94a3b8; max-width: 600px; margin-bottom: 25px; line-height: 1.5; }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            background: rgba(30, 41, 59, 0.6);
+            padding: 15px 25px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            margin-bottom: 25px;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+        .btn-group { display: flex; gap: 15px; }
+        button {
+            background: #0284c7;
+            color: white;
+            border: 1px solid #38bdf8;
+            padding: 12px 24px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover { background: #38bdf8; color: #020617; transform: scale(1.05); }
+        button.hard { background: #991b1b; border-color: #f87171; }
+        button.hard:hover { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="850" height="550"></canvas>
+
+    <div id="hud">
+        <div class="hud-group">
+            <div>LEVEL <span id="level">1</span></div>
+            <div>SCORE: <span id="score">0</span></div>
+            <div>CAPTURED: <span id="captured">0</span></div>
+        </div>
+        <div class="hud-group">
+            <div>SHIELD <div class="bar-container"><div id="shield-bar" class="bar-fill"></div></div></div>
+            <div>FUEL <div class="bar-container"><div id="fuel-bar" class="bar-fill"></div></div></div>
+            <div>TRACTOR <div class="bar-container"><div id="tractor-bar" class="bar-fill"></div></div></div>
+        </div>
+    </div>
+
+    <div id="alert-banner">ALERT: SOLAR STORM DETECTED</div>
+
+    <div id="telemetry">
+        <span id="nasa-log">[SYSTEM READY] Waiting for orbital deployment...</span>
+        <span id="velocity-readout">VEL: 7.66 km/s</span>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <h1>ORBITAL CLEAN-UP PRO</h1>
+        <p class="subtitle">
+            Simulation of Kessler Syndrome mitigation. Pilot the ADR-01 collector module, capture orbital debris with your magnetic pulse, and protect NASA's active satellites.
+        </p>
+        <div class="controls-grid">
+            <div><strong>[W A S D / Arrow Keys]</strong> Maneuver spacecraft</div>
+            <div><strong>[SPACE / Click]</strong> Activate Tractor Beam</div>
+            <div><strong>[SHIFT]</strong> Turbo Thruster (Consumes fuel)</div>
+            <div><strong>Objective:</strong> Capture old debris and avoid active satellites</div>
+        </div>
+        <div class="btn-group">
+            <button onclick="iniciarJuego('LEO')">LEO Mission (Low Orbit - Normal)</button>
+            <button class="hard" onclick="iniciarJuego('GEO')">GEO Mission (High Density - Difficult)</button>
+        </div>
+    </div>
+
+    <div id="gameover-screen" class="overlay" style="display: none;">
+        <h1 style="color: #ef4444;">CRITICAL FAILURE IN ORBIT</h1>
+        <p class="subtitle" id="gameover-reason">Hull integrity fell to 0%.</p>
+        <div class="controls-grid" style="grid-template-columns: 1fr; text-align: center;">
+            <div>Final Score: <strong id="final-score" style="color:#38bdf8; font-size:1.2rem;">0</strong></div>
+            <div>Debris Deorbited: <strong id="final-captured">0</strong> pieces</div>
+            <div>Level Reached: <strong id="final-level">1</strong></div>
+        </div>
+        <button onclick="location.reload()">Restart Simulation</button>
+    </div>
+</div>
+
+<script>
+const lienzo = document.getElementById("gameCanvas");
+const contexto = lienzo.getContext("2d");
+
+const contextoAudio = new (window.AudioContext || window.webkitAudioContext)();
+function reproducirSonido(frecuencia, tipo, duracion) {
+    if (contextoAudio.state === 'suspended') contextoAudio.resume();
+    const oscilador = contextoAudio.createOscillator();
+    const ganancia = contextoAudio.createGain();
+    oscilador.type = tipo;
+    oscilador.frequency.setValueAtTime(frecuencia, contextoAudio.currentTime);
+    ganancia.gain.setValueAtTime(0.08, contextoAudio.currentTime);
+    ganancia.gain.exponentialRampToValueAtTime(0.001, contextoAudio.currentTime + duracion);
+    oscilador.connect(ganancia);
+    ganancia.connect(contextoAudio.destination);
+    oscilador.start();
+    oscilador.stop(contextoAudio.currentTime + duracion);
+}
+
+const datosNasa = [
+    "NASA ODPO estimates that there are about 500,000 objects the size of a marble in low Earth orbit.",
+    "NASA ODPO estimates more than 100 million objects of 1 mm or less in orbit around Earth.",
+    "Even the smallest fragments can be dangerous due to their extreme orbital speeds (NASA ODPO).",
+    "NASA ODPO studies debris with radars, optical telescopes, and space sensors.",
+    "NASA ODPO also analyzes impact marks on spacecraft surfaces returning to Earth.",
+    "In 1995, NASA ODPO developed the first NASA requirements set to mitigate orbital debris.",
+    "NASA uses models such as ORDEM and LEGEND to study debris risk and evolution."
+];
+
+let estadoJuego = "MENU";
+let dificultad = "LEO";
+let puntuacion = 0, capturas = 0, nivel = 1;
+let escudo = 100, combustible = 100, energiaTractor = 100;
+let tractorActivo = false;
+let tormentaSolar = false;
+let tiempoTormenta = 0;
+
+let jugador = { x: 400, y: 420, vx: 0, vy: 0, radius: 18 };
+let estrellas = [];
+let entidades = [];
+let particulas = [];
+let teclas = {};
+
+for (let indice = 0; indice < 120; indice++) {
+    estrellas.push({
+        x: Math.random() * lienzo.width,
+        y: Math.random() * lienzo.height,
+        size: Math.random() * 2 + 0.5,
+        speed: Math.random() * 1.5 + 0.3
+    });
+}
+
+window.addEventListener("keydown", evento => {
+    teclas[evento.code] = true;
+    if (evento.code === "Space") tractorActivo = true;
+});
+window.addEventListener("keyup", evento => {
+    teclas[evento.code] = false;
+    if (evento.code === "Space") tractorActivo = false;
+});
+lienzo.addEventListener("mousedown", () => tractorActivo = true);
+lienzo.addEventListener("mouseup", () => tractorActivo = false);
+
+function iniciarJuego(modo) {
+    dificultad = modo;
+    document.getElementById("start-screen").style.display = "none";
+    estadoJuego = "PLAYING";
+    puntuacion = 0; capturas = 0; nivel = 1;
+    escudo = 100; combustible = 100; energiaTractor = 100;
+    entidades = []; particulas = [];
+    jugador.x = lienzo.width / 2;
+    jugador.y = lienzo.height - 90;
+    actualizarTelemetria(`Deployment in orbit ${modo} complete. Use [SPACE] to capture debris!`);
+    bucle();
+}
+
+function actualizarTelemetria(mensaje) {
+    document.getElementById("nasa-log").innerText = mensaje;
+}
+
+function crearExplosion(coordenadaX, coordenadaY, colorParticula, cantidad = 15) {
+    for (let indice = 0; indice < cantidad; indice++) {
+        particulas.push({
+            x: coordenadaX, y: coordenadaY,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: 1.0,
+            color: colorParticula
+        });
+    }
+}
+
+function generarEntidad() {
+    let tasaAparicion = dificultad === "LEO" ? 0.035 : 0.055;
+    tasaAparicion += nivel * 0.004;
+
+    if (Math.random() < tasaAparicion) {
+        const aleatorio = Math.random();
+        let tipo = "trash";
+        if (aleatorio > 0.88) tipo = "fuel";
+        else if (aleatorio > 0.62) tipo = "active";
+        else if (aleatorio > 0.48) tipo = "heavy";
+
+        entidades.push({
+            x: Math.random() * (lienzo.width - 60) + 30,
+            y: -30,
+            vx: (Math.random() - 0.5) * (1.2 + nivel * 0.2),
+            vy: (Math.random() * 1.8 + 1.5) * (dificultad === "GEO" ? 1.35 : 1) + (nivel * 0.15),
+            type: tipo,
+            angle: 0,
+            spin: (Math.random() - 0.5) * 0.08,
+            radius: tipo === "heavy" ? 20 : 14
+        });
+    }
+}
+
+function actualizar() {
+    if (estadoJuego !== "PLAYING") return;
+
+    if (!tormentaSolar && Math.random() < 0.0012 && nivel >= 2) {
+        tormentaSolar = true;
+        tiempoTormenta = 420;
+        document.getElementById("alert-banner").style.display = "block";
+        reproducirSonido(180, "sawtooth", 0.5);
+        actualizarTelemetria("ALERT: SOLAR STORM: Magnetic interference and increased orbital drift.");
+    }
+    if (tormentaSolar) {
+        tiempoTormenta--;
+        if (tiempoTormenta <= 0) {
+            tormentaSolar = false;
+            document.getElementById("alert-banner").style.display = "none";
+            actualizarTelemetria("SOLAR STORM ENDED. Systems nominal.");
+        }
+    }
+
+    let aceleracion = 0.45;
+    let impulsando = (teclas["ShiftLeft"] || teclas["ShiftRight"]) && combustible > 0;
+    if (impulsando) {
+        aceleracion = 0.85;
+        combustible = Math.max(0, combustible - 0.35);
+        particulas.push({
+            x: jugador.x + (Math.random() - 0.5) * 8,
+            y: jugador.y + 18,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: 3 + Math.random() * 2,
+            life: 0.6,
+            color: "#38bdf8"
+        });
+    } else {
+        combustible = Math.min(100, combustible + 0.03);
+    }
+
+    let direccion = tormentaSolar ? -1 : 1;
+    if (teclas["ArrowLeft"] || teclas["KeyA"]) jugador.vx -= aceleracion;
+    if (teclas["ArrowRight"] || teclas["KeyD"]) jugador.vx += aceleracion;
+    if (teclas["ArrowUp"] || teclas["KeyW"]) jugador.vy -= aceleracion;
+    if (teclas["ArrowDown"] || teclas["KeyS"]) jugador.vy += aceleracion;
+
+    if (tormentaSolar) jugador.vx += (Math.random() - 0.5) * 0.6;
+
+    jugador.vx *= 0.92;
+    jugador.vy *= 0.92;
+    jugador.x += jugador.vx;
+    jugador.y += jugador.vy;
+
+    jugador.x = Math.max(25, Math.min(lienzo.width - 25, jugador.x));
+    jugador.y = Math.max(60, Math.min(lienzo.height - 35, jugador.y));
+
+    if (tractorActivo && energiaTractor > 0) {
+        energiaTractor = Math.max(0, energiaTractor - 0.65);
+    } else {
+        tractorActivo = false;
+        energiaTractor = Math.min(100, energiaTractor + 0.35);
+    }
+
+    generarEntidad();
+
+    for (let indice = entidades.length - 1; indice >= 0; indice--) {
+        let entidad = entidades[indice];
+        entidad.x += entidad.vx;
+        entidad.y += entidad.vy;
+        entidad.angle += entidad.spin;
+
+        if (entidad.x < 20 || entidad.x > lienzo.width - 20) entidad.vx *= -1;
+
+        let diferenciaX = jugador.x - entidad.x;
+        let diferenciaY = jugador.y - entidad.y;
+        let distancia = Math.hypot(diferenciaX, diferenciaY);
+
+        if (tractorActivo && distancia < 135 && (entidad.type === "trash" || entidad.type === "heavy" || entidad.type === "fuel")) {
+            let fuerza = entidad.type === "heavy" ? 0.06 : 0.11;
+            entidad.vx += diferenciaX * fuerza * 0.15;
+            entidad.vy += diferenciaY * fuerza * 0.15;
+        }
+
+        if (distancia < jugador.radius + entidad.radius) {
+            if (entidad.type === "fuel") {
+                combustible = Math.min(100, combustible + 35);
+                escudo = Math.min(100, escudo + 10);
+                reproducirSonido(600, "sine", 0.2);
+                crearExplosion(entidad.x, entidad.y, "#38bdf8", 10);
+                actualizarTelemetria("ENERGY CELL CAPTURED: +35% Delta-V Fuel.");
+            } else if (entidad.type === "trash" || entidad.type === "heavy") {
+                if (tractorActivo) {
+                    let puntos = entidad.type === "heavy" ? 50 : 20;
+                    puntuacion += puntos;
+                    capturas++;
+                    reproducirSonido(450, "triangle", 0.15);
+                    crearExplosion(entidad.x, entidad.y, "#a855f7", 12);
+
+                    let nuevoNivel = Math.floor(puntuacion / 150) + 1;
+                    if (nuevoNivel > nivel) {
+                        nivel = nuevoNivel;
+                        escudo = Math.min(100, escudo + 25);
+                        actualizarTelemetria(`LEVEL ASCENT ${nivel}! Shields reinforced to ${Math.round(escudo)}%.`);
+                        reproducirSonido(750, "sine", 0.35);
+                    } else if (capturas % 4 === 0) {
+                        actualizarTelemetria(datosNasa[Math.floor(Math.random() * datosNasa.length)]);
+                    }
+                } else {
+                    escudo -= 10;
+                    reproducirSonido(140, "sawtooth", 0.2);
+                    crearExplosion(entidad.x, entidad.y, "#f59e0b", 12);
+                    actualizarTelemetria("KINETIC IMPACT! Activate the Tractor Beam [SPACE] before touching debris.");
+                }
+            } else if (entidad.type === "active") {
+                escudo -= 25;
+                puntuacion = Math.max(0, puntuacion - 30);
+                reproducirSonido(100, "sawtooth", 0.4);
+                crearExplosion(entidad.x, entidad.y, "#ef4444", 22);
+                actualizarTelemetria("ACTIVE SATELLITE COLLISION! Mission penalty (-25% Shield).");
+            }
+
+            entidades.splice(indice, 1);
+
+            if (escudo <= 0) {
+                finJuego("Your spacecraft suffered too many orbital impacts.");
+                return;
+            }
+            continue;
+        }
+
+        if (entidad.y > lienzo.height + 40) entidades.splice(indice, 1);
+    }
+
+    for (let indice = particulas.length - 1; indice >= 0; indice--) {
+        let particula = particulas[indice];
+        particula.x += particula.vx;
+        particula.y += particula.vy;
+        particula.life -= 0.03;
+        if (particula.life <= 0) particulas.splice(indice, 1);
+    }
+
+    document.getElementById("level").innerText = nivel;
+    document.getElementById("score").innerText = puntuacion;
+    document.getElementById("captured").innerText = capturas;
+    document.getElementById("shield-bar").style.width = `${Math.max(0, escudo)}%`;
+    document.getElementById("fuel-bar").style.width = `${combustible}%`;
+    document.getElementById("tractor-bar").style.width = `${energiaTractor}%`;
+    document.getElementById("velocity-readout").innerText = `SPEED: ${(7.66 + nivel * 0.12).toFixed(2)} km/s`;
+}
+
+function dibujar() {
+    contexto.clearRect(0, 0, lienzo.width, lienzo.height);
+
+    contexto.fillStyle = "#ffffff";
+    estrellas.forEach(estrella => {
+        estrella.y += estrella.speed * (1 + nivel * 0.1);
+        if (estrella.y > lienzo.height) { estrella.y = 0; estrella.x = Math.random() * lienzo.width; }
+        contexto.globalAlpha = estrella.speed / 2;
+        contexto.fillRect(estrella.x, estrella.y, estrella.size, estrella.size);
+    });
+    contexto.globalAlpha = 1;
+
+    let degradado = contexto.createRadialGradient(425, 820, 260, 425, 820, 340);
+    degradado.addColorStop(0, "#1d4ed8");
+    degradado.addColorStop(0.7, "#0284c7");
+    degradado.addColorStop(1, "transparent");
+    contexto.fillStyle = degradado;
+    contexto.beginPath();
+    contexto.arc(425, 820, 340, 0, Math.PI * 2);
+    contexto.fill();
+
+    if (tractorActivo) {
+        contexto.beginPath();
+        contexto.arc(jugador.x, jugador.y, 130, 0, Math.PI * 2);
+        contexto.strokeStyle = "rgba(168, 85, 247, 0.65)";
+        contexto.lineWidth = 2;
+        contexto.setLineDash([6, 6]);
+        contexto.stroke();
+        contexto.setLineDash([]);
+        contexto.fillStyle = "rgba(168, 85, 247, 0.12)";
+        contexto.fill();
+    }
+
+    contexto.save();
+    contexto.translate(jugador.x, jugador.y);
+    contexto.rotate(jugador.vx * 0.05);
+    contexto.fillStyle = "#e2e8f0";
+    contexto.beginPath();
+    contexto.moveTo(0, -20);
+    contexto.lineTo(14, 14);
+    contexto.lineTo(0, 8);
+    contexto.lineTo(-14, 14);
+    contexto.closePath();
+    contexto.fill();
+    contexto.fillStyle = "#0284c7";
+    contexto.fillRect(-26, -2, 12, 8);
+    contexto.fillRect(14, -2, 12, 8);
+    contexto.restore();
+
+    entidades.forEach(entidad => {
+        contexto.save();
+        contexto.translate(entidad.x, entidad.y);
+        contexto.rotate(entidad.angle);
+        contexto.lineWidth = 2;
+
+        if (entidad.type === "trash") {
+            contexto.shadowBlur = 12;
+            contexto.shadowColor = "#fbbf24";
+            contexto.fillStyle = "#b7791f";
+            contexto.strokeStyle = "#fde68a";
+            contexto.beginPath();
+            contexto.moveTo(-15, -7);
+            contexto.lineTo(-8, -16);
+            contexto.lineTo(3, -13);
+            contexto.lineTo(15, -8);
+            contexto.lineTo(13, 5);
+            contexto.lineTo(6, 15);
+            contexto.lineTo(-7, 13);
+            contexto.lineTo(-16, 5);
+            contexto.closePath();
+            contexto.fill();
+            contexto.stroke();
+            contexto.shadowBlur = 0;
+            contexto.strokeStyle = "#fef3c7";
+            contexto.lineWidth = 2;
+            contexto.beginPath();
+            contexto.moveTo(-7, -7);
+            contexto.lineTo(2, 1);
+            contexto.lineTo(-4, 8);
+            contexto.moveTo(5, -9);
+            contexto.lineTo(9, -5);
+            contexto.stroke();
+        } else if (entidad.type === "heavy") {
+            contexto.shadowBlur = 14;
+            contexto.shadowColor = "#fb923c";
+            contexto.fillStyle = "#475569";
+            contexto.strokeStyle = "#e2e8f0";
+            contexto.beginPath();
+            contexto.rect(-14, -17, 28, 34);
+            contexto.fill();
+            contexto.stroke();
+            contexto.shadowBlur = 0;
+            contexto.fillStyle = "#f97316";
+            contexto.fillRect(-13, -8, 26, 5);
+            contexto.fillRect(-13, 4, 26, 5);
+            contexto.strokeStyle = "#cbd5e1";
+            contexto.lineWidth = 2;
+            contexto.beginPath();
+            contexto.ellipse(0, -16, 11, 3, 0, 0, Math.PI * 2);
+            contexto.ellipse(0, 17, 11, 3, 0, 0, Math.PI * 2);
+            contexto.stroke();
+        } else if (entidad.type === "fuel") {
+            contexto.shadowBlur = 14;
+            contexto.shadowColor = "#38bdf8";
+            contexto.fillStyle = "#0369a1";
+            contexto.strokeStyle = "#bae6fd";
+            contexto.beginPath();
+            contexto.rect(-11, -14, 22, 28);
+            contexto.fill();
+            contexto.stroke();
+            contexto.shadowBlur = 0;
+            contexto.fillStyle = "#e0f2fe";
+            contexto.fillRect(-3, -19, 6, 5);
+            contexto.fillRect(-7, -3, 14, 4);
+            contexto.fillRect(-2, -8, 4, 14);
+            contexto.fillStyle = "#7dd3fc";
+            contexto.fillRect(-7, 8, 14, 2);
+        } else if (entidad.type === "active") {
+            contexto.shadowBlur = 16;
+            contexto.shadowColor = "#ef4444";
+            contexto.fillStyle = "rgba(239, 68, 68, 0.16)";
+            contexto.strokeStyle = "#f87171";
+            contexto.lineWidth = 2.5;
+            contexto.beginPath();
+            contexto.arc(0, 0, 25, 0, Math.PI * 2);
+            contexto.fill();
+            contexto.stroke();
+            contexto.shadowBlur = 0;
+
+            contexto.fillStyle = "#cbd5e1";
+            contexto.strokeStyle = "#f8fafc";
+            contexto.lineWidth = 1.5;
+            contexto.fillRect(-7, -7, 14, 14);
+            contexto.strokeRect(-7, -7, 14, 14);
+
+            contexto.fillStyle = "#2563eb";
+            contexto.strokeStyle = "#93c5fd";
+            contexto.fillRect(-24, -6, 12, 12);
+            contexto.strokeRect(-24, -6, 12, 12);
+            contexto.fillRect(12, -6, 12, 12);
+            contexto.strokeRect(12, -6, 12, 12);
+            contexto.strokeStyle = "#bfdbfe";
+            contexto.lineWidth = 1;
+            contexto.beginPath();
+            contexto.moveTo(-20, -5);
+            contexto.lineTo(-20, 5);
+            contexto.moveTo(-16, -5);
+            contexto.lineTo(-16, 5);
+            contexto.moveTo(16, -5);
+            contexto.lineTo(16, 5);
+            contexto.moveTo(20, -5);
+            contexto.lineTo(20, 5);
+            contexto.stroke();
+        }
+        contexto.restore();
+    });
+
+    particulas.forEach(particula => {
+        contexto.globalAlpha = particula.life;
+        contexto.fillStyle = particula.color;
+        contexto.fillRect(particula.x, particula.y, 4, 4);
+    });
+    contexto.globalAlpha = 1;
+}
+
+function finJuego(motivo) {
+    estadoJuego = "GAMEOVER";
+    document.getElementById("gameover-reason").innerText = motivo;
+    document.getElementById("final-score").innerText = puntuacion;
+    document.getElementById("final-captured").innerText = capturas;
+    document.getElementById("final-level").innerText = nivel;
+    document.getElementById("gameover-screen").style.display = "flex";
+}
+
+function bucle() {
+    if (estadoJuego === "PLAYING") {
+        actualizar();
+        dibujar();
+        requestAnimationFrame(bucle);
+    }
+}
+</script>
+</body>
+</html>
